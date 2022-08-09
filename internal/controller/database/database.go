@@ -46,18 +46,11 @@ const (
 	errNewClient = "cannot create new Service"
 )
 
-// A PlanetScaleService does nothing.
-type PlanetScaleService struct{
-	pCLI *planetscale.Client
-}
+// A NoOpService does nothing.
+type NoOpService struct{}
 
 var (
-	newPlanetScaleService = func(creds []byte) (*PlanetScaleService, error) {
-		c, err := planetscale.NewClient(planetscale.WithAccessToken(string(creds)))
-		return &PlanetScaleService{
-			pCLI: c,
-		}, err
-	}
+	newNoOpService = func(_ []byte) (interface{}, error) { return &NoOpService{}, nil }
 )
 
 // Setup adds a controller that reconciles Database managed resources.
@@ -74,7 +67,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		managed.WithExternalConnecter(&connector{
 			kube:         mgr.GetClient(),
 			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
-			newServiceFn: newPlanetScaleService}),
+			newServiceFn: newNoOpService}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithConnectionPublishers(cps...))
@@ -91,7 +84,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 type connector struct {
 	kube         client.Client
 	usage        resource.Tracker
-	newServiceFn func(creds []byte) (*PlanetScaleService, error)
+	newServiceFn func(creds []byte) (interface{}, error)
 }
 
 // Connect typically produces an ExternalClient by:
@@ -133,7 +126,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
-	service *PlanetScaleService
+	service interface{}
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -142,8 +135,21 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errNotDatabase)
 	}
 
-	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	db, err := c.service.pCLI.Database.Get(ctx, &planetscale.GetDatabaseRequest{
+		Organization: cr.Spec.ForProvider.Organization,
+		Database:	  meta.GetExternalName(cr),
+	})
+
+	if pErr, ok := err.(*planetscale.Error); ok && pErr.Code == planetscale.ErrNotFound {
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil
+	}
+
+
+	if db.State == planetscale.DatabaseReady {
+		cr.State.SetConditions(xpv1.Available())
+	}
 
 	return managed.ExternalObservation{
 		// Return false when the external resource does not exist. This lets
@@ -168,29 +174,13 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotDatabase)
 	}
 
-	notes := ""
-	if cr.Spec.ForProvider.Notes != nil {
-		notes = *cr.Spec.ForProvider.Notes
-	}
-
-	region := ""
-	if cr.Spec.ForProvider.Region != nil {
-		region = *cr.Spec.ForProvider.Region
-	}
-	db, err := c.service.pCLI.Databases.Create(ctx, &planetscale.CreateDatabaseRequest{
-		Organization: cr.Spec.ForProvider.Organization,
-		Name:		  meta.GetExternalName(cr),
-		Notes:		  notes,
-		Region:		  region,
-	})
-
-	cr.Status.AtProvider.State = string(db.State)
+	fmt.Printf("Creating: %+v", cr)
 
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
 		ConnectionDetails: managed.ConnectionDetails{},
-	}, err
+	}, nil
 }
 
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {

@@ -1,0 +1,10 @@
+apiVersion: database.planetscale.crossplane.io/v1alpha1
+kind: Database
+metadata:
+  name: example
+spec:
+  forProvider:
+    organization: shivankchaudhary79
+    notes: "this is my new database"
+  providerConfigRef:
+    name: default

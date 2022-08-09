@@ -27,16 +27,12 @@ import (
 
 // DatabaseParameters are the configurable fields of a Database.
 type DatabaseParameters struct {
-	Organization string `json:"organization"`
-	// +optional
-	Notes        *string `json:"notes,omitempty"`
-	// +optional
-	Region       *string `json:"region,omitempty"`
+	ConfigurableField string `json:"configurableField"`
 }
 
 // DatabaseObservation are the observable fields of a Database.
 type DatabaseObservation struct {
-	State string `json:"state"`
+	ObservableField string `json:"observableField,omitempty"`
 }
 
 // A DatabaseSpec defines the desired state of a Database.
