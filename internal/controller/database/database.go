@@ -142,6 +142,8 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.New(errNotDatabase)
 	}
 
+	// These fmt statements should be removed in the real implementation.
+	fmt.Printf("Observing: %+v", cr)
 
 	return managed.ExternalObservation{
 		// Return false when the external resource does not exist. This lets
@@ -168,14 +170,14 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	notes := ""
 	if cr.Spec.ForProvider.Notes != nil {
-		notes =cr.Spec.ForProvider.Notes
+		notes = *cr.Spec.ForProvider.Notes
 	}
 
 	region := ""
 	if cr.Spec.ForProvider.Region != nil {
-		region =cr.Spec.ForProvider.Region
+		region = *cr.Spec.ForProvider.Region
 	}
-	db, err := c.service.pCLI.Databases.Create(ctx, planetscale.CreateDatabaseRequest{
+	db, err := c.service.pCLI.Databases.Create(ctx, &planetscale.CreateDatabaseRequest{
 		Organization: cr.Spec.ForProvider.Organization,
 		Name:		  meta.GetExternalName(cr),
 		Notes:		  notes,
